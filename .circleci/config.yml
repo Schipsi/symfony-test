@@ -1,0 +1,192 @@
+version: 2.1
+
+orbs:
+  docker: circleci/docker@1.0.0
+
+jobs:
+  build-assets:
+    docker:
+      - image:  circleci/node:12.13.0
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - run: yarn build
+      - persist_to_workspace:
+          root: .
+          paths:
+            - public/assets
+            - var/manifest.json
+
+  lint-js:
+    docker:
+      - image: circleci/node:12.13.0
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/project
+      - run: yarn lint:js
+
+  lint-scss:
+    docker:
+      - image: circleci/node:12.13.0
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/project
+      - run: yarn lint:scss
+
+  lint-twig:
+    docker:
+      - image: circleci/php:7.4.0
+    environment:
+      APP_ENV: prod
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/project
+      - run:
+          name: Lint
+          command: bin/console lint:twig templates
+      - run:
+          name: CS
+          command: vendor/bin/twigcs --ruleset App\\Twig\\Ruleset templates
+
+  php-dependencies:
+    docker:
+      - image: circleci/php:7.4.0
+    steps:
+      - checkout
+      - restore_cache:
+          key: vendor-{{ checksum "composer.json" }}-{{ checksum "composer.lock" }}
+          paths:
+            - vendor
+      - run: composer install --ignore-platform-reqs --no-scripts
+      - save_cache:
+          key: vendor-{{ checksum "composer.json" }}-{{ checksum "composer.lock" }}
+          paths:
+            - vendor
+      - persist_to_workspace:
+          root: .
+          paths:
+            - vendor
+
+  php-lint:
+    docker:
+      - image: circleci/php:7.4.0
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - run:
+          name: PHP-CS-Fixer
+          command: vendor/bin/php-cs-fixer fix --dry-run --diff --using-cache no
+      - run:
+          name: PHPStan
+          command: vendor/bin/phpstan analyse src tests
+
+  migrations:
+    docker:
+      - image: circleci/php:7.4.0
+        user: root
+        environment:
+          DATABASE_URL: postgresql://thetribe:424242@localhost:5432/thetribe
+      - image: postgres:10.7
+        environment:
+          POSTGRES_USER: thetribe
+          POSTGRES_PASSWORD: 424242
+    steps:
+      - run:
+          name: Install pdo_pgsql php extension
+          command: apt update && apt install --yes libpq-dev && docker-php-ext-install pdo_pgsql
+      - checkout
+      - attach_workspace:
+          at: .
+      - run:
+          name: Wait for db
+          command: dockerize -wait tcp://localhost:5432 -timeout 1m
+      - run: bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration
+      - run: bin/console doctrine:schema:validate
+
+  build:
+    docker:
+      - image: circleci/php:7.4.0
+        environment:
+          APP_ENV: prod
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - run: composer install --ignore-platform-reqs --no-scripts --no-dev --optimize-autoloader --classmap-authoritative
+      - run: bin/console cache:warmup
+      - run: bin/console assets:install
+      - run:
+          name: Create archive
+          command: |
+            tar -czf archive.tar.gz --owner=0 --group=0 \
+              bin/console \
+              config/bootstrap.php \
+              config/bundles.php \
+              migrations/ \
+              public/ \
+              src/ \
+              templates/ \
+              var/cache/prod/ \
+              var/manifest.json \
+              vendor/ \
+      - store_artifacts:
+          path: archive.tar.gz
+
+  yarn-install:
+    docker:
+      - image:  circleci/node:12.13.0
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - yarn-install-{{ checksum "package.json" }}-{{ checksum "yarn.lock" }}
+            - yarn-install-{{ checksum "package.json" }}
+            - yarn-install
+          paths:
+            - node_modules
+      - run:
+          command: yarn install --frozen-lockfile
+      - save_cache:
+          key: yarn-install-{{ checksum "package.json" }}-{{ checksum "yarn.lock" }}
+          paths:
+            - node_modules
+      - persist_to_workspace:
+          root: ~/project
+          paths:
+            - node_modules
+
+workflows:
+  version: 2
+  build:
+    jobs:
+      - docker/hadolint:
+          dockerfiles: docker/nginx/Dockerfile,docker/node/Dockerfile,docker/php/Dockerfile
+      - build:
+          requires:
+            - php-dependencies
+            - build-assets
+      - build-assets:
+          requires:
+            - yarn-install
+      - lint-js:
+          requires:
+            - yarn-install
+      - lint-scss:
+          requires:
+            - yarn-install
+      - lint-twig:
+          requires:
+            - php-dependencies
+      - php-dependencies
+      - php-lint:
+          requires:
+            - php-dependencies
+      - migrations:
+          requires:
+            - php-dependencies
+      - yarn-install

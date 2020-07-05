@@ -22,15 +22,11 @@ class Todo
     protected $id;
 
     /**
-     * @var string
-     *
      * @ORM\Column(type="string", length=255, nullable=false)
      */
     protected string $name = '';
 
     /**
-     * @var bool
-     *
      * @ORM\Column(type="boolean", nullable=false, options={"default"=false})
      */
     protected bool $completed;
