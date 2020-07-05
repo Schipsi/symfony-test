@@ -1,0 +1,52 @@
+{% extends 'base.html.twig' %}
+
+{% block stylesheets %}
+    {{ parent() }}
+{% endblock %}
+
+{% block javascripts %}
+    {{ parent() }}
+{% endblock %}
+
+{% block body %}
+    <h1 class="todo-title" data-colorizer>
+        Todo
+    </h1>
+    <table>
+        <tr>
+            <td>
+                Numéro
+            </td>
+            <td>
+                Tache
+            </td>
+            <td>
+                Fait
+            </td>
+            <td>
+                Supprimer
+            </td>
+        </tr>
+        {% for todo in todos %}
+            <tr>
+                <td>
+                    {{ todo.id }}
+                </td>
+                <td>
+                    {{ todo.name }}
+                </td>
+                <td>
+                    {{ todo.completed ? 'Fait' : 'A faire' }}
+                </td>
+                <td>
+                    <a href="/todo/delete/{{ todo.id }}">Supprimer la note</a>
+                </td>
+            </tr>
+        {% endfor %}
+    </table>
+        {{ form(form) }}
+    <a>Ajouter un Todo</a>
+    <p>
+        <a href="/">Retourner à la homepage</a>
+    </p>
+{% endblock %}

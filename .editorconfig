@@ -1,0 +1,4 @@
+root = true
+
+[.circleci/config.yml]
+indent_size = 2
