@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Entity\Todo;
-use Diplo\Bundle\AppBundle\Form\Type\TodoType;
+use App\Form\Type\TodoType;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
@@ -54,7 +55,7 @@ class TodoController extends AbstractController
     /**
      * @Route("/delete/{id}", name="app_todo_delete")
      */
-    public function deleteAction(Request $request, Todo $todo)
+    public function deleteAction(Request $request, Todo $todo): RedirectResponse
     {
         $this->getDoctrine()->getManager()->remove($todo);
         $this->getDoctrine()->getManager()->flush();
